@@ -1,0 +1,58 @@
+#! /bin/bash
+
+HOSTNAME=copr.fedorainfracloud.org
+REPODIR=/etc/yum.repos.d
+
+ask_yn ()
+{
+    read -p "  $* (y/n)? " choice
+    test "$choice" = y
+}
+
+info ()
+{
+    echo >&2 "$*"
+}
+
+error ()
+{
+    echo >&2 "ERROR: $*"
+}
+
+for repofile in /etc/yum.repos.d/_copr_*.repo
+do
+  base=$(basename "$repofile")
+  # old_IFS=$IFS
+  # IFS=_
+
+  wip=${base//_copr_/}
+
+  user_or_group=${wip//-*/}
+  wip=${wip//$user_or_group-/}
+  project=${wip//.repo/}
+
+  new_format=copr:$HOSTNAME:$user_or_group:$project
+
+  new_file=$new_format.repo
+
+  info "renaming $base -> $new_file"
+  if ! ask_yn "are you sure"; then
+      info "  skip"
+      continue
+  fi
+
+  repo_user_or_group=$user_or_group
+  case $user_or_group in
+      @*)
+          repo_user_or_group=group_${user_or_group//@/}
+          ;;
+  esac
+
+  old_repoid=$repo_user_or_group-$project
+  if ! grep -q "$old_repoid" "$repofile"; then
+      error "$repofile doesn't have [$old_repoid] section"
+      continue
+  fi
+
+  sed "s|$old_repoid|$new_format|" "$repofile" > "$REPODIR/$new_file"
+done
